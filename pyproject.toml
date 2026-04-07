@@ -10,10 +10,22 @@ dependencies = [
     "streamlit>=1.50.0",
 ]
 
-[dependency-groups]
-dev = [
-    "trial-observatory-streamlit",
-]
+
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ['src']
+include = ['trial_observatory*']
 
 [tool.uv.sources]
-trial-observatory-streamlit = { workspace = true, editable = true }
+trial_observatory_streamlit = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "trial_observatory_streamlit",
+]
+
+[tool.pytest.ini_options]
+pythonpath="src"
