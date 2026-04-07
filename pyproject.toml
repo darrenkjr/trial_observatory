@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ['src']
-include = ['trial_observatory*']
+include = ['trial_observatory_streamlit*']
 
 [tool.uv.sources]
 trial-observatory-streamlit = { workspace = true, editable = true }
