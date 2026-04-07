@@ -6,7 +6,7 @@ import pyalex
 from pyalex import Works
 import os
 import re
-from trial_observatory.convenience import fetch_trials, is_completed_after, create_wide_export_dataframe
+from trial_observatory_streamlit.convenience import fetch_trials, is_completed_after, create_wide_export_dataframe
 
 def main(): 
     pyalex.config.api_key = st.secrets["oa_apikey"]
