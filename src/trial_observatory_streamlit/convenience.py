@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timedelta
 import pandas as pd
 
+@st.cache_data(ttl=timedelta(days=1), show_spinner="Fetching trials...")
 def fetch_trials(cond, intr, start_dt, today, expansion_type):
 
     #fetch completed trials in the past X years 
