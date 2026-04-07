@@ -28,10 +28,7 @@ def main():
     start_date = today - timedelta(days=lookback_years * 365)
     one_year_ago = today - timedelta(days=365)
 
-    # --- API Fetching Logic ---
-    @st.cache_data(ttl=3600) # Cache results for 1 hour to stay fast
- 
-
+    # --- API Fetching Logic ---# 
     if st.sidebar.button("Run Search"):
         with st.spinner(f"Searching for {condition} with {intervention} trials..."):
             all_studies = fetch_trials(condition, intervention, start_date)

@@ -20,11 +20,11 @@ where = ['src']
 include = ['trial_observatory*']
 
 [tool.uv.sources]
-trial_observatory_streamlit = { workspace = true }
+trial-observatory-streamlit = { workspace = true, editable = true }
 
 [dependency-groups]
 dev = [
-    "trial_observatory_streamlit",
+    "trial-observatory-streamlit",
 ]
 
 [tool.pytest.ini_options]
