@@ -31,7 +31,7 @@ def main():
     # --- API Fetching Logic ---# 
     if st.sidebar.button("Run Search"):
         with st.spinner(f"Searching for {condition} with {intervention} trials..."):
-            all_studies = fetch_trials(condition, intervention, start_date, expansion_type)
+            all_studies = fetch_trials(condition, intervention, start_date, today, expansion_type)
         
         if not all_studies:
             st.warning("No trials found for those parameters.")
