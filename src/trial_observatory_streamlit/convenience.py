@@ -1,6 +1,6 @@
 
 
-def fetch_trials(cond, intr, start_dt):
+def fetch_trials(cond, intr, start_dt, expansion_type):
 
     #fetch completed trials in the past X years 
     url = "https://clinicaltrials.gov/api/v2/studies"
