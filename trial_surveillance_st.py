@@ -198,7 +198,7 @@ def main():
 
             # --- PUBLICATIONS SECTION ---
             st.markdown("#### 📚 Related Publication(s) for Each Completed Trial (With Results)")
-            st.info("Needs publications are retrieved from a) citations uploaded by trial investigators b) automatically derived from PubMed where NCT IDs have been cited / mentioned.")
+            st.info("Linked publications are retrieved from a) citations uploaded by trial investigators b) automatically derived from PubMed where NCT IDs have been cited / mentioned. Derived publications are likely to be more resent than the trial completion date, and are typically the articles describing the results of the trial.")
 
             with st.spinner("Fetching citation details from OpenAlex..."):
                 citation_display_list = []
