@@ -5,11 +5,9 @@ from datetime import datetime, timedelta
 import pyalex
 from pyalex import Works
 import os
-from dotenv import load_dotenv
-load_dotenv()
 import re
 
-pyalex.config.api_key = os.getenv("oa_apikey")
+pyalex.config.api_key = st.secrets["oa_apikey"]
 
 # --- App Config ---
 st.set_page_config(page_title="TrialTrackr", page_icon="🔬", layout="wide")
