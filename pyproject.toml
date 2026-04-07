@@ -22,10 +22,5 @@ include = ['trial_observatory*']
 [tool.uv.sources]
 trial-observatory-streamlit = { workspace = true, editable = true }
 
-[dependency-groups]
-dev = [
-    "trial-observatory-streamlit",
-]
-
 [tool.pytest.ini_options]
 pythonpath="src"
