@@ -6,7 +6,94 @@ import pyalex
 from pyalex import Works
 import os
 import re
-from trial_observatory_streamlit.convenience import fetch_trials, is_completed_after, create_wide_export_dataframe
+from trial_observatory_streamlit.convenience import fetch_trials, is_completed_after, create_wide_export_dataframe, extract_trial_dataframes
+
+
+def render_trial_tabs(trials):
+    if not trials:
+        return
+    df_overview, df_population, df_intervention, df_outcome = extract_trial_dataframes(trials)
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 Trial Overview", "👥 Population & Eligibility", "💊 Interventions", "🎯 Outcomes"])
+
+    with tab1:
+        st.dataframe(df_overview, column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, width="stretch")
+
+    with tab2:
+        st.dataframe(df_population, column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, width="stretch")
+
+    with tab3:
+        st.dataframe(df_intervention, column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, width="stretch")
+
+    with tab4:
+        st.dataframe(df_outcome, column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large"), "Secondary Outcomes": st.column_config.TextColumn("Secondary Outcomes", width="large")}, hide_index=True, width="stretch")
+
+def fetch_and_render_publications(trials):
+    if not trials:
+        return
+    with st.spinner("Fetching citation details from OpenAlex..."):
+        citation_display_list = []
+        for s in trials:
+            nct_id = s['protocolSection']['identificationModule']['nctId']
+            references = s.get('protocolSection', {}).get('referencesModule', {}).get('references', [])
+            for ref in references:
+                citation_text = ref.get('citation', 'N/A')
+                match = re.search(r'10\.\d{4,}/[^\s]+', citation_text)
+
+                doi = None
+                if match:
+                    doi = match.group(0).rstrip('.')
+                    
+                citation_display_list.append({
+                    "NCT ID": nct_id, 
+                    "Citation Text": citation_text,
+                    "DOI" : doi,
+                    "PMID": ref.get('pmid'),
+                    "Type": ref.get('type', 'N/A')
+                    })
+
+        if citation_display_list:
+            df_citation = pd.DataFrame(citation_display_list)
+            
+            oa_result_fields = ['ids', 'publication_date']
+            doi_list = [d for d in df_citation['DOI'].unique().tolist() if d is not None]
+            
+            if doi_list:
+                oa_results = []
+                for i in range(0, len(doi_list), 50):
+                    chunk = doi_list[i:i + 50]
+                    try:
+                        chunk_results = Works().filter_or(doi=chunk).select(oa_result_fields).get()
+                        oa_results.extend(chunk_results)
+                    except Exception as e:
+                        print(f"Error fetching DOI chunk from OpenAlex: {e}")
+
+                pub_date_map = {}
+                for work in oa_results:
+                    raw_doi_url = work.get('ids', {}).get('doi', '').strip()
+                    if raw_doi_url:
+                        naked_doi = raw_doi_url.split('doi.org/')[-1].strip().lower()
+                        pub_date_map[naked_doi] = work.get('publication_date')
+
+                df_citation['Publication Date'] = df_citation['DOI'].map(pub_date_map)
+            else:
+                df_citation['Publication Date'] = None
+
+            st.dataframe(
+                df_citation,
+                column_config={
+                    "NCT ID": st.column_config.TextColumn("NCT ID"),
+                    "Citation Text": st.column_config.TextColumn("Citation Text", width="large"),
+                    "PMID": st.column_config.TextColumn("PMID"),
+                    "DOI": st.column_config.TextColumn("DOI Link"), 
+                    "Publication Date": st.column_config.DateColumn("Published"),
+                    "Type": st.column_config.TextColumn("Type"),
+                },
+                hide_index=True,
+                width="stretch",
+            )
+        else:
+            st.write("No publications found for these trials.")
 
 def main(): 
     pyalex.config.api_key = st.secrets["oa_apikey"]
@@ -110,89 +197,7 @@ def main():
             # --- NEW TABBED SECTION FOR COMPLETED TRIALS ---
             st.markdown("## 📊 Completed Trials PICO View (With Posted Results)")
             
-            df_overview_list = []
-            df_population_list = []
-            df_intervention_list = []
-            df_outcome_list = []
-
-            for s in comp_res:
-                nct_id = s['protocolSection']['identificationModule']['nctId']
-                title = s['protocolSection']['identificationModule'].get('briefTitle', 'No Title')
-                url = f"https://clinicaltrials.gov/study/{nct_id}"
-                protocol = s.get('protocolSection', {})
-
-                # 1. OVERVIEW DATA
-                design = protocol.get('designModule', {})
-                status_mod = protocol.get('statusModule', {})
-                sponsor_mod = protocol.get('sponsorCollaboratorsModule', {})
-                
-                df_overview_list.append({
-                    "NCT ID": nct_id,
-                    "Trial Name": title,
-                    "Phases": " | ".join(design.get('phases', [])),
-                    "Study Type": design.get('studyType', ''),
-                    "Enrollment": design.get('enrollmentInfo', {}).get('count', 'N/A'),
-                    "Sponsor": sponsor_mod.get('leadSponsor', {}).get('name', ''),
-                    "Start Date": status_mod.get('startDateStruct', {}).get('date', ''),
-                    "Completion Date": status_mod.get('completionDateStruct', {}).get('date', ''),
-                    "URL": url
-                })
-
-                # 2. POPULATION / ELIGIBILITY DATA
-                eligibility = protocol.get('eligibilityModule', {})
-                df_population_list.append({
-                    "NCT ID": nct_id,
-                    "Sex": eligibility.get('sex', 'Not Specified'),
-                    "Min Age": eligibility.get('minimumAge', '0 Years'),
-                    "Max Age": eligibility.get('maximumAge', 'No Limit'),
-                    "Eligibility Criteria": eligibility.get('eligibilityCriteria', 'Not Provided'),
-                    "URL": url
-                })
-
-                # 3. INTERVENTION DATA
-                arms_interventions = protocol.get('armsInterventionsModule', {})
-                interventions_list = arms_interventions.get('interventions', [])
-                arms_list = arms_interventions.get('armGroups', [])
-                
-                int_str = "\n\n".join([f"• {i.get('type', '')}: {i.get('name', '')}\n  {i.get('description', '')}" for i in interventions_list])
-                arms_str = "\n\n".join([f"• {a.get('type', 'Arm')}: {a.get('label', '')}\n  {a.get('description', '')}" for a in arms_list])
-
-                df_intervention_list.append({
-                    "NCT ID": nct_id,
-                    "Arms / Groups": arms_str,
-                    "Interventions Details": int_str,
-                    "URL": url
-                })
-
-                # 4. OUTCOME DATA
-                outcomes_module = protocol.get('outcomesModule', {})
-                primary_outcomes = outcomes_module.get('primaryOutcomes', [])
-                secondary_outcomes = outcomes_module.get('secondaryOutcomes',[])
-                
-                out_str = "\n\n".join([f"• {o.get('measure', '')}\n  Time Frame: {o.get('timeFrame', '')}" for o in primary_outcomes])
-                sec_out_str = "\n\n".join([f"• {o.get('measure', 'N/A')}\n  Time Frame: {o.get('timeFrame', 'N/A')}" for o in secondary_outcomes])
-                df_outcome_list.append({
-                    "NCT ID": nct_id,
-                    "Primary Outcomes": out_str,
-                    "Secondary Outcomes" : sec_out_str,
-                    "URL": url
-                })
-
-            # Render the Tabs
-            if comp_res:
-                tab1, tab2, tab3, tab4 = st.tabs(["📋 Trial Overview", "👥 Population & Eligibility", "💊 Interventions", "🎯 Outcomes"])
-
-                with tab1:
-                    st.dataframe(pd.DataFrame(df_overview_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, width="stretch")
-
-                with tab2:
-                    st.dataframe(pd.DataFrame(df_population_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, width="stretch")
-
-                with tab3:
-                    st.dataframe(pd.DataFrame(df_intervention_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, width="stretch")
-
-                with tab4:
-                    st.dataframe(pd.DataFrame(df_outcome_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large")}, hide_index=True, width="stretch")
+            render_trial_tabs(comp_res)
 
             st.divider()
 
@@ -200,330 +205,30 @@ def main():
             st.markdown("#### 📚 Related Publication(s) for Each Completed Trial (With Results)")
             st.info("Linked publications are retrieved from a) citations uploaded by trial investigators b) automatically derived from PubMed where NCT IDs have been cited / mentioned. Derived publications are likely to be more recent than the trial completion date, and are typically the articles describing the results of the trial.")
 
-            with st.spinner("Fetching citation details from OpenAlex..."):
-                citation_display_list = []
-                for s in comp_res:
-                    nct_id = s['protocolSection']['identificationModule']['nctId']
-                    references = s.get('protocolSection', {}).get('referencesModule', {}).get('references', [])
-                    for ref in references:
-                        citation_text = ref.get('citation', 'N/A')
-                        match = re.search(r'10\.\d{4,}/[^\s]+', citation_text)
+            fetch_and_render_publications(comp_res)
 
-                        # FIXED: Initialize doi as None to avoid crashing if no match is found!
-                        doi = None
-                        if match:
-                            doi = match.group(0).rstrip('.')
-                            
-                        citation_display_list.append({
-                            "NCT ID": nct_id, 
-                            "Citation Text": citation_text,
-                            "DOI" : doi,
-                            "PMID": ref.get('pmid'),
-                            "Type": ref.get('type', 'N/A')
-                            })
-
-                if citation_display_list:
-                    df_citation = pd.DataFrame(citation_display_list)
-                    
-                    # Fetch from OpenAlex
-                    oa_result_fields = ['ids', 'publication_date']
-                    pmid_list = df_citation['PMID'].unique().tolist() 
-                    doi_list = [d for d in df_citation['DOI'].unique().tolist() if d is not None] # ensure no None types are sent to API
-                    
-                    if doi_list:
-                        oa_results = []
-                        # OpenAlex limits OR filters to 50 items and can return non-JSON errors if exceeded
-                        for i in range(0, len(doi_list), 50):
-                            chunk = doi_list[i:i + 50]
-                            try:
-                                chunk_results = Works().filter_or(doi=chunk).select(oa_result_fields).get()
-                                oa_results.extend(chunk_results)
-                            except Exception as e:
-                                print(f"Error fetching DOI chunk from OpenAlex: {e}")
-                                
-                        pub_date_map = {}
-                        
-                        for work in oa_results:
-                            raw_doi_url = work.get('ids', {}).get('doi', '').strip()
-                            if raw_doi_url:
-                                naked_doi = raw_doi_url.split('doi.org/')[-1].strip().lower()
-                                pub_date_map[naked_doi] = work.get('publication_date')
-
-                        df_citation['Publication Date'] = df_citation['DOI'].map(pub_date_map)
-                    else:
-                        df_citation['Publication Date'] = None
-
-                    st.dataframe(
-                        df_citation,
-                        column_config={
-                            "NCT ID": st.column_config.TextColumn("NCT ID"),
-                            "Citation Text": st.column_config.TextColumn("Citation Text", width="large"),
-                            "PMID": st.column_config.TextColumn("PMID"),
-                            "DOI": st.column_config.TextColumn("DOI Link"), 
-                            "Publication Date": st.column_config.DateColumn("Published"),
-                            "Type": st.column_config.TextColumn("Type"),
-                        },
-                        hide_index=True,
-                        width="stretch",
-                    )
-                else:
-                    st.write("No publications found for these trials.")
 
     # --- COMPLETED TRIALS (PENDING RESULTS) SECTION ---
             if comp_no_res:
                 st.markdown("## ⏳ Completed Trials PICO View (Pending Results)")
                 st.info("These trials have completed their primary endpoints but have not yet posted results on ClinicalTrials.gov.")
                 
-                df_overview_no_res = []
-                df_population_no_res = []
-                df_intervention_no_res = []
-                df_outcome_no_res = []
-
-                for s in comp_no_res:
-                    nct_id = s['protocolSection']['identificationModule']['nctId']
-                    title = s['protocolSection']['identificationModule'].get('briefTitle', 'No Title')
-                    url = f"https://clinicaltrials.gov/study/{nct_id}"
-                    protocol = s.get('protocolSection', {})
-
-                    # 1. OVERVIEW DATA
-                    design = protocol.get('designModule', {})
-                    status_mod = protocol.get('statusModule', {})
-                    sponsor_mod = protocol.get('sponsorCollaboratorsModule', {})
-                    
-                    df_overview_no_res.append({
-                        "NCT ID": nct_id,
-                        "Trial Name": title,
-                        "Phases": " | ".join(design.get('phases', [])),
-                        "Study Type": design.get('studyType', ''),
-                        "Enrollment": design.get('enrollmentInfo', {}).get('count', 'N/A'),
-                        "Sponsor": sponsor_mod.get('leadSponsor', {}).get('name', ''),
-                        "Start Date": status_mod.get('startDateStruct', {}).get('date', ''),
-                        "Completion Date": status_mod.get('completionDateStruct', {}).get('date', ''),
-                        "URL": url
-                    })
-
-                    # 2. POPULATION / ELIGIBILITY DATA
-                    eligibility = protocol.get('eligibilityModule', {})
-                    df_population_no_res.append({
-                        "NCT ID": nct_id,
-                        "Sex": eligibility.get('sex', 'Not Specified'),
-                        "Min Age": eligibility.get('minimumAge', '0 Years'),
-                        "Max Age": eligibility.get('maximumAge', 'No Limit'),
-                        "Eligibility Criteria": eligibility.get('eligibilityCriteria', 'Not Provided'),
-                        "URL": url
-                    })
-
-                    # 3. INTERVENTION DATA
-                    arms_interventions = protocol.get('armsInterventionsModule', {})
-                    interventions_list = arms_interventions.get('interventions', [])
-                    arms_list = arms_interventions.get('armGroups', [])
-                    
-                    int_str = "\n\n".join([f"• {i.get('type', '')}: {i.get('name', '')}\n  {i.get('description', '')}" for i in interventions_list])
-                    arms_str = "\n\n".join([f"• {a.get('type', 'Arm')}: {a.get('label', '')}\n  {a.get('description', '')}" for a in arms_list])
-
-                    df_intervention_no_res.append({
-                        "NCT ID": nct_id,
-                        "Arms / Groups": arms_str,
-                        "Interventions Details": int_str,
-                        "URL": url
-                    })
-
-                    # 4. OUTCOME DATA
-                    outcomes_module = protocol.get('outcomesModule', {})
-                    primary_outcomes = outcomes_module.get('primaryOutcomes', [])
-                    secondary_outcomes = outcomes_module.get('secondaryOutcomes',[])
-                    
-                    out_str = "\n\n".join([f"• {o.get('measure', '')}\n  Time Frame: {o.get('timeFrame', '')}" for o in primary_outcomes])
-                    sec_out_str = "\n\n".join([f"• {o.get('measure', 'N/A')}\n  Time Frame: {o.get('timeFrame', 'N/A')}" for o in secondary_outcomes])
-                    df_outcome_no_res.append({
-                        "NCT ID": nct_id,
-                        "Primary Outcomes": out_str,
-                        "Secondary Outcomes" : sec_out_str,
-                        "URL": url
-                    })
-
-                # Render the Tabs
-                tab1_nr, tab2_nr, tab3_nr, tab4_nr = st.tabs(["📋 Trial Overview", "👥 Population & Eligibility", "💊 Interventions", "🎯 Outcomes"])
-
-                with tab1_nr:
-                    st.dataframe(pd.DataFrame(df_overview_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, width="stretch")
-
-                with tab2_nr:
-                    st.dataframe(pd.DataFrame(df_population_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, width="stretch")
-
-                with tab3_nr:
-                    st.dataframe(pd.DataFrame(df_intervention_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, width="stretch")
-
-                with tab4_nr:
-                    st.dataframe(pd.DataFrame(df_outcome_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large"), "Secondary Outcomes": st.column_config.TextColumn("Secondary Outcomes", width="large")}, hide_index=True, width="stretch")
+                render_trial_tabs(comp_no_res)
 
             st.divider()
 
             st.markdown("#### 📚 Related Publication(s) for Each Completed Trial (Overdue Results)")
             st.info("Linked publications are retrieved from a) citations uploaded by trial investigators b) automatically derived from PubMed where NCT IDs have been cited / mentioned. Derived publications are likely to be more recent than the trial completion date, and are typically the articles describing the results of the trial.")
 
-            with st.spinner("Fetching citation details from OpenAlex..."):
-                citation_display_list = []
-                for s in comp_no_res:
-                    nct_id = s['protocolSection']['identificationModule']['nctId']
-                    references = s.get('protocolSection', {}).get('referencesModule', {}).get('references', [])
-                    for ref in references:
-                        citation_text = ref.get('citation', 'N/A')
-                        match = re.search(r'10\.\d{4,}/[^\s]+', citation_text)
+            fetch_and_render_publications(comp_no_res)
 
-                        # FIXED: Initialize doi as None to avoid crashing if no match is found!
-                        doi = None
-                        if match:
-                            doi = match.group(0).rstrip('.')
-                            
-                        citation_display_list.append({
-                            "NCT ID": nct_id, 
-                            "Citation Text": citation_text,
-                            "DOI" : doi,
-                            "PMID": ref.get('pmid'),
-                            "Type": ref.get('type', 'N/A')
-                            })
-
-                if citation_display_list:
-                    df_citation = pd.DataFrame(citation_display_list)
-                    
-                    # Fetch from OpenAlex
-                    oa_result_fields = ['ids', 'publication_date']
-                    pmid_list = df_citation['PMID'].unique().tolist() 
-                    doi_list = [d for d in df_citation['DOI'].unique().tolist() if d is not None] # ensure no None types are sent to API
-                    
-                    if doi_list:
-                        oa_results = []
-                        # OpenAlex limits OR filters to 50 items and can return non-JSON errors if exceeded
-                        for i in range(0, len(doi_list), 50):
-                            chunk = doi_list[i:i + 50]
-                            try:
-                                chunk_results = Works().filter_or(doi=chunk).select(oa_result_fields).get()
-                                oa_results.extend(chunk_results)
-                            except Exception as e:
-                                print(f"Error fetching DOI chunk from OpenAlex: {e}")
-
-                        pub_date_map = {}
-                        
-                        for work in oa_results:
-                            raw_doi_url = work.get('ids', {}).get('doi', '').strip()
-                            if raw_doi_url:
-                                naked_doi = raw_doi_url.split('doi.org/')[-1].strip().lower()
-                                pub_date_map[naked_doi] = work.get('publication_date')
-
-                        df_citation['Publication Date'] = df_citation['DOI'].map(pub_date_map)
-                    else:
-                        df_citation['Publication Date'] = None
-
-                    st.dataframe(
-                        df_citation,
-                        column_config={
-                            "NCT ID": st.column_config.TextColumn("NCT ID"),
-                            "Citation Text": st.column_config.TextColumn("Citation Text", width="large"),
-                            "PMID": st.column_config.TextColumn("PMID"),
-                            "DOI": st.column_config.TextColumn("DOI Link"), 
-                            "Publication Date": st.column_config.DateColumn("Published"),
-                            "Type": st.column_config.TextColumn("Type"),
-                        },
-                        hide_index=True,
-                        width="stretch",
-                    )
-                else:
-                    st.write("No publications found for these trials.")
 
 
         # --- ACTIVE TRIALS (PENDING RESULTS) SECTION ---
         if active: 
             st.markdown("## 📋 Active Trials (Pending Results)")
             st.info("These trials are currently active, and include trials with unkown status, ongoing recruitment, or trials with completed recruitment")
-            df_active_list = []
-            df_pop_active_list = []
-            df_int_active_list = []
-            df_out_active_list = []
-            for s in active:
-                nct_id = s['protocolSection']['identificationModule']['nctId']
-                url = f"https://clinicaltrials.gov/study/{nct_id}"
-                title = s['protocolSection']['identificationModule']['briefTitle']
-                protocol = s.get('protocolSection', {})
-                design = protocol.get('designModule', {})
-                status_mod = protocol.get('statusModule', {})
-                sponsor_mod = protocol.get('sponsorCollaboratorsModule', {})
-
-                status = status_mod.get('overallStatus', 'N/A')
-                enrollment = design.get('enrollmentInfo', {}).get('count', 'N/A')
-                enrollment_type = design.get('enrollmentInfo', {}).get('enrollmentType', 'N/A')
-                phase = design.get('phase', 'N/A')
-                study_type = design.get('studyType', 'N/A')
-                start_date = status_mod.get('startDateStruct', {}).get('date', 'N/A')
-                completion_date = status_mod.get('completionDateStruct', {}).get('date', 'N/A')
-                
-                df_active_list.append({
-                    "NCT ID": nct_id,
-                    "Trial Name": title,
-                    "Status": status,
-                    "Phases": phase,
-                    "Study Type": study_type,
-                    "Enrollment": enrollment,
-                    "Sponsor": sponsor_mod.get('leadSponsor', {}).get('name', ''),
-                    "Start Date": start_date,
-                    "Expected Completion Date": completion_date,
-                    "URL": url
-                })
-
-                #eligibility data
-                eligibility_active = protocol.get('eligibilityModule', {})
-                df_pop_active_list.append({
-                    "NCT ID": nct_id,
-                    "Sex": eligibility_active.get('sex', 'Not Specified'),
-                    "Min Age": eligibility_active.get('minimumAge', '0 Years'),
-                    "Max Age": eligibility_active.get('maximumAge', 'No Limit'),
-                    "Eligibility Criteria": eligibility_active.get('eligibilityCriteria', 'Not Provided'),
-                    "URL": url
-                })
-
-                # 3. INTERVENTION DATA
-                arms_interventions_active = protocol.get('armsInterventionsModule', {})
-                interventions_list_active = arms_interventions_active.get('interventions', [])
-                arms_list_active = arms_interventions_active.get('armGroups', [])
-                
-                int_str_active = "\n\n".join([f"• {i.get('type', '')}: {i.get('name', '')}\n  {i.get('description', '')}" for i in interventions_list_active])
-                arms_str_active = "\n\n".join([f"• {a.get('type', 'Arm')}: {a.get('label', '')}\n  {a.get('description', '')}" for a in arms_list_active])
-
-                df_int_active_list.append({
-                    "NCT ID": nct_id,
-                    "Arms / Groups": arms_str_active,
-                    "Interventions Details": int_str_active,
-                    "URL": url
-                })
-                
-                # 4. OUTCOME DATA
-                outcomes_module_active = protocol.get('outcomesModule', {})
-                primary_outcomes_active = outcomes_module_active.get('primaryOutcomes', [])
-                secondary_outcomes_active = outcomes_module_active.get('secondaryOutcomes',[])
-                
-                out_str_active = "\n\n".join([f"• {o.get('measure', '')}\n  Time Frame: {o.get('timeFrame', '')}" for o in primary_outcomes_active])
-                sec_out_str_active = "\n\n".join([f"• {o.get('measure', 'N/A')}\n  Time Frame: {o.get('timeFrame', 'N/A')}" for o in secondary_outcomes_active])
-                df_out_active_list.append({
-                    "NCT ID": nct_id,
-                    "Primary Outcomes": out_str_active,
-                    "Secondary Outcomes" : sec_out_str_active,
-                    "URL": url
-                })
-
-            # Render the Tabs
-            tab1_a, tab2_a, tab3_a, tab4_a = st.tabs(["📋 Trial Overview", "👥 Population & Eligibility", "💊 Interventions", "🎯 Outcomes"])
-
-            with tab1_a:
-                st.dataframe(pd.DataFrame(df_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, width="stretch")
-
-            with tab2_a:
-                st.dataframe(pd.DataFrame(df_pop_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, width="stretch")
-
-            with tab3_a:
-                st.dataframe(pd.DataFrame(df_int_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, width="stretch")
-
-            with tab4_a:
-                st.dataframe(pd.DataFrame(df_out_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large"), "Secondary Outcomes": st.column_config.TextColumn("Secondary Outcomes", width="large")}, hide_index=True, width="stretch")
+            render_trial_tabs(active)
 
             st.divider()
 
