@@ -183,16 +183,16 @@ def main():
                 tab1, tab2, tab3, tab4 = st.tabs(["📋 Trial Overview", "👥 Population & Eligibility", "💊 Interventions", "🎯 Outcomes"])
 
                 with tab1:
-                    st.dataframe(pd.DataFrame(df_overview_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(df_overview_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, width="stretch")
 
                 with tab2:
-                    st.dataframe(pd.DataFrame(df_population_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(df_population_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, width="stretch")
 
                 with tab3:
-                    st.dataframe(pd.DataFrame(df_intervention_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(df_intervention_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, width="stretch")
 
                 with tab4:
-                    st.dataframe(pd.DataFrame(df_outcome_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large")}, hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(df_outcome_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large")}, hide_index=True, width="stretch")
 
             st.divider()
 
@@ -231,7 +231,16 @@ def main():
                     doi_list = [d for d in df_citation['DOI'].unique().tolist() if d is not None] # ensure no None types are sent to API
                     
                     if doi_list:
-                        oa_results = Works().filter_or(doi=doi_list).select(oa_result_fields).get()
+                        oa_results = []
+                        # OpenAlex limits OR filters to 50 items and can return non-JSON errors if exceeded
+                        for i in range(0, len(doi_list), 50):
+                            chunk = doi_list[i:i + 50]
+                            try:
+                                chunk_results = Works().filter_or(doi=chunk).select(oa_result_fields).get()
+                                oa_results.extend(chunk_results)
+                            except Exception as e:
+                                print(f"Error fetching DOI chunk from OpenAlex: {e}")
+                                
                         pub_date_map = {}
                         
                         for work in oa_results:
@@ -255,7 +264,7 @@ def main():
                             "Type": st.column_config.TextColumn("Type"),
                         },
                         hide_index=True,
-                        use_container_width=True,
+                        width="stretch",
                     )
                 else:
                     st.write("No publications found for these trials.")
@@ -337,16 +346,16 @@ def main():
                 tab1_nr, tab2_nr, tab3_nr, tab4_nr = st.tabs(["📋 Trial Overview", "👥 Population & Eligibility", "💊 Interventions", "🎯 Outcomes"])
 
                 with tab1_nr:
-                    st.dataframe(pd.DataFrame(df_overview_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(df_overview_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, width="stretch")
 
                 with tab2_nr:
-                    st.dataframe(pd.DataFrame(df_population_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(df_population_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, width="stretch")
 
                 with tab3_nr:
-                    st.dataframe(pd.DataFrame(df_intervention_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(df_intervention_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, width="stretch")
 
                 with tab4_nr:
-                    st.dataframe(pd.DataFrame(df_outcome_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large"), "Secondary Outcomes": st.column_config.TextColumn("Secondary Outcomes", width="large")}, hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(df_outcome_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large"), "Secondary Outcomes": st.column_config.TextColumn("Secondary Outcomes", width="large")}, hide_index=True, width="stretch")
 
             st.divider()
 
@@ -384,7 +393,16 @@ def main():
                     doi_list = [d for d in df_citation['DOI'].unique().tolist() if d is not None] # ensure no None types are sent to API
                     
                     if doi_list:
-                        oa_results = Works().filter_or(doi=doi_list).select(oa_result_fields).get()
+                        oa_results = []
+                        # OpenAlex limits OR filters to 50 items and can return non-JSON errors if exceeded
+                        for i in range(0, len(doi_list), 50):
+                            chunk = doi_list[i:i + 50]
+                            try:
+                                chunk_results = Works().filter_or(doi=chunk).select(oa_result_fields).get()
+                                oa_results.extend(chunk_results)
+                            except Exception as e:
+                                print(f"Error fetching DOI chunk from OpenAlex: {e}")
+
                         pub_date_map = {}
                         
                         for work in oa_results:
@@ -408,7 +426,7 @@ def main():
                             "Type": st.column_config.TextColumn("Type"),
                         },
                         hide_index=True,
-                        use_container_width=True,
+                        width="stretch",
                     )
                 else:
                     st.write("No publications found for these trials.")
@@ -493,16 +511,16 @@ def main():
             tab1_a, tab2_a, tab3_a, tab4_a = st.tabs(["📋 Trial Overview", "👥 Population & Eligibility", "💊 Interventions", "🎯 Outcomes"])
 
             with tab1_a:
-                st.dataframe(pd.DataFrame(df_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, use_container_width=True)
+                st.dataframe(pd.DataFrame(df_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, width="stretch")
 
             with tab2_a:
-                st.dataframe(pd.DataFrame(df_pop_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, use_container_width=True)
+                st.dataframe(pd.DataFrame(df_pop_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, width="stretch")
 
             with tab3_a:
-                st.dataframe(pd.DataFrame(df_int_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, use_container_width=True)
+                st.dataframe(pd.DataFrame(df_int_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, width="stretch")
 
             with tab4_a:
-                st.dataframe(pd.DataFrame(df_out_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large"), "Secondary Outcomes": st.column_config.TextColumn("Secondary Outcomes", width="large")}, hide_index=True, use_container_width=True)
+                st.dataframe(pd.DataFrame(df_out_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large"), "Secondary Outcomes": st.column_config.TextColumn("Secondary Outcomes", width="large")}, hide_index=True, width="stretch")
 
             st.divider()
 
@@ -522,7 +540,7 @@ def main():
                         data=csv_res,
                         file_name=f"{condition}_trials_with_results.csv",
                         mime="text/csv",
-                        use_container_width=True
+                        width="stretch"
                     )
                     
             # Button 2: Trials PENDING Results
@@ -535,7 +553,7 @@ def main():
                         data=csv_no_res,
                         file_name=f"{condition}_trials_pending_results.csv",
                         mime="text/csv",
-                        use_container_width=True
+                        width="stretch"
                     )
             
             # Button 3: Active Trials   
@@ -548,7 +566,7 @@ def main():
                         data=csv_active,
                         file_name=f"{condition}_active_trials.csv",
                         mime="text/csv",
-                        use_container_width=True
+                        width="stretch"
                     )
 
     else:
