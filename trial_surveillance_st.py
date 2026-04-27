@@ -351,12 +351,103 @@ def main():
             st.divider()
 
 
+        # --- ACTIVE TRIALS (PENDING RESULTS) SECTION ---
+        if active: 
+            st.markdown("## 📋 Active Trials (Pending Results)")
+            st.info("These trials are currently active, and include trials with unkown status, ongoing recruitment, or trials with completed recruitment")
+            df_active_list = []
+            df_pop_active_list = []
+            df_int_active_list = []
+            df_out_active_list = []
+            for s in active:
+                nct_id = s['protocolSection']['identificationModule']['nctId']
+                url = f"https://clinicaltrials.gov/study/{nct_id}"
+                title = s['protocolSection']['identificationModule']['briefTitle']
+                protocol = s.get('protocolSection', {})
+
+                if 'leadSponsor' in protocol.get('sponsorModule', {}):
+                    lead_sponsor = protocol['sponsorModule']['leadSponsor']['fullName']
+                else:
+                    lead_sponsor = "N/A"
+                status = protocol.get('statusModule', {}).get('overallStatus', 'N/A')
+                enrollment = protocol.get('designModule', {}).get('enrollmentInfo', {}).get('count', 'N/A')
+                enrollment_type = protocol.get('designModule', {}).get('enrollmentInfo', {}).get('enrollmentType', 'N/A')
+                phase = protocol.get('designModule', {}).get('phase', 'N/A')
+                study_type = protocol.get('designModule', {}).get('studyType', 'N/A')
+                df_active_list.append({
+                    "NCT ID": nct_id,
+                    "Title": title,
+                    "Lead Sponsor": lead_sponsor,
+                    "Status": status,
+                    "Enrollment": enrollment,
+                    "Enrollment Type": enrollment_type,
+                    "Phase": phase,
+                    "Study Type": study_type,
+                    "URL": url
+                })
+
+                #eligibility data
+                eligibility_active = protocol.get('eligibilityModule', {})
+                df_pop_active_list.append({
+                    "NCT ID": nct_id,
+                    "Sex": eligibility_active.get('sex', 'Not Specified'),
+                    "Min Age": eligibility_active.get('minimumAge', '0 Years'),
+                    "Max Age": eligibility_active.get('maximumAge', 'No Limit'),
+                    "Eligibility Criteria": eligibility_active.get('eligibilityCriteria', 'Not Provided'),
+                    "URL": url
+                })
+
+                # 3. INTERVENTION DATA
+                arms_interventions_active = protocol.get('armsInterventionsModule', {})
+                interventions_list_active = arms_interventions_active.get('interventions', [])
+                arms_list_active = arms_interventions_active.get('armGroups', [])
+                
+                int_str_active = "\n\n".join([f"• {i.get('type', '')}: {i.get('name', '')}\n  {i.get('description', '')}" for i in interventions_list_active])
+                arms_str_active = "\n\n".join([f"• {a.get('type', 'Arm')}: {a.get('label', '')}\n  {a.get('description', '')}" for a in arms_list_active])
+
+                df_int_active_list.append({
+                    "NCT ID": nct_id,
+                    "Arms / Groups": arms_str_active,
+                    "Interventions Details": int_str_active,
+                    "URL": url
+                })
+                
+                # 4. OUTCOME DATA
+                outcomes_module_active = protocol.get('outcomesModule', {})
+                primary_outcomes_active = outcomes_module_active.get('primaryOutcomes', [])
+                secondary_outcomes_active = outcomes_module_active.get('secondaryOutcomes',[])
+                
+                out_str_active = "\n\n".join([f"• {o.get('measure', '')}\n  Time Frame: {o.get('timeFrame', '')}" for o in primary_outcomes_active])
+                sec_out_str_active = "\n\n".join([f"• {o.get('measure', 'N/A')}\n  Time Frame: {o.get('timeFrame', 'N/A')}" for o in secondary_outcomes_active])
+                df_out_active_list.append({
+                    "NCT ID": nct_id,
+                    "Primary Outcomes": out_str_active,
+                    "Secondary Outcomes" : sec_out_str_active,
+                    "URL": url
+                })
+
+            # Render the Tabs
+            tab1_a, tab2_a, tab3_a, tab4_a = st.tabs(["📋 Trial Overview", "👥 Population & Eligibility", "💊 Interventions", "🎯 Outcomes"])
+
+            with tab1_a:
+                st.dataframe(pd.DataFrame(df_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov")}, hide_index=True, use_container_width=True)
+
+            with tab2_a:
+                st.dataframe(pd.DataFrame(df_pop_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Eligibility Criteria": st.column_config.TextColumn("Eligibility Criteria", width="large")}, hide_index=True, use_container_width=True)
+
+            with tab3_a:
+                st.dataframe(pd.DataFrame(df_int_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Arms / Groups": st.column_config.TextColumn("Arms / Groups", width="large"), "Interventions Details": st.column_config.TextColumn("Interventions Details", width="large")}, hide_index=True, use_container_width=True)
+
+            with tab4_a:
+                st.dataframe(pd.DataFrame(df_out_active_list), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large"), "Secondary Outcomes": st.column_config.TextColumn("Secondary Outcomes", width="large")}, hide_index=True, use_container_width=True)
+
+            st.divider()
 
         # --- EXPORT DATA SECTION ---
             st.markdown("## 📥 Export Data")
             st.write("Download the complete datasets as CSV files for offline analysis.")
             
-            col_dl1, col_dl2 = st.columns(2)
+            col_dl1, col_dl2, col_dl3 = st.columns(3)
             
             # Button 1: Trials WITH Results
             if comp_res:
@@ -380,6 +471,19 @@ def main():
                         label="📥 Download Completed Trials (Pending Results)",
                         data=csv_no_res,
                         file_name=f"{condition}_trials_pending_results.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+            
+            # Button 3: Active Trials   
+            if active:
+                df_export_active = create_wide_export_dataframe(active)
+                csv_active = df_export_active.to_csv(index=False).encode('utf-8')
+                with col_dl3:
+                    st.download_button(
+                        label="📥 Download Active Trials",
+                        data=csv_active,
+                        file_name=f"{condition}_active_trials.csv",
                         mime="text/csv",
                         use_container_width=True
                     )
