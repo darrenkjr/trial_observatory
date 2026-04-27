@@ -445,25 +445,31 @@ def main():
                 url = f"https://clinicaltrials.gov/study/{nct_id}"
                 title = s['protocolSection']['identificationModule']['briefTitle']
                 protocol = s.get('protocolSection', {})
+                design = protocol.get('designModule', {})
+                status_mod = protocol.get('statusModule', {})
+                sponsor_mod = protocol.get('sponsorCollaboratorsModule', {})
 
-                if 'leadSponsor' in protocol.get('sponsorModule', {}):
-                    lead_sponsor = protocol['sponsorModule']['leadSponsor']['fullName']
+                if 'leadSponsor' in sponsor_mod:
+                    lead_sponsor = sponsor_mod['leadSponsor']['fullName']
                 else:
                     lead_sponsor = "N/A"
-                status = protocol.get('statusModule', {}).get('overallStatus', 'N/A')
-                enrollment = protocol.get('designModule', {}).get('enrollmentInfo', {}).get('count', 'N/A')
-                enrollment_type = protocol.get('designModule', {}).get('enrollmentInfo', {}).get('enrollmentType', 'N/A')
-                phase = protocol.get('designModule', {}).get('phase', 'N/A')
-                study_type = protocol.get('designModule', {}).get('studyType', 'N/A')
+                status = status_mod.get('overallStatus', 'N/A')
+                enrollment = design.get('enrollmentInfo', {}).get('count', 'N/A')
+                enrollment_type = design.get('enrollmentInfo', {}).get('enrollmentType', 'N/A')
+                phase = design.get('phase', 'N/A')
+                study_type = design.get('studyType', 'N/A')
+                start_date = status_mod.get('startDateStruct', {}).get('date', 'N/A')
+                completion_date = status_mod.get('completionDateStruct', {}).get('date', 'N/A')
+                
                 df_active_list.append({
                     "NCT ID": nct_id,
-                    "Title": title,
-                    "Lead Sponsor": lead_sponsor,
-                    "Status": status,
-                    "Enrollment": enrollment,
-                    "Enrollment Type": enrollment_type,
-                    "Phase": phase,
+                    "Trial Name": title,
+                    "Phases": phase,
                     "Study Type": study_type,
+                    "Enrollment": enrollment,
+                    "Sponsor": lead_sponsor,
+                    "Start Date": start_date,
+                    "Completion Date": completion_date,
                     "URL": url
                 })
 
