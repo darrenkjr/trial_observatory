@@ -449,10 +449,6 @@ def main():
                 status_mod = protocol.get('statusModule', {})
                 sponsor_mod = protocol.get('sponsorCollaboratorsModule', {})
 
-                if 'leadSponsor' in sponsor_mod:
-                    lead_sponsor = sponsor_mod['leadSponsor']['fullName']
-                else:
-                    lead_sponsor = "N/A"
                 status = status_mod.get('overallStatus', 'N/A')
                 enrollment = design.get('enrollmentInfo', {}).get('count', 'N/A')
                 enrollment_type = design.get('enrollmentInfo', {}).get('enrollmentType', 'N/A')
@@ -464,12 +460,13 @@ def main():
                 df_active_list.append({
                     "NCT ID": nct_id,
                     "Trial Name": title,
+                    "Status": status,
                     "Phases": phase,
                     "Study Type": study_type,
                     "Enrollment": enrollment,
-                    "Sponsor": lead_sponsor,
+                    "Sponsor": sponsor_mod.get('leadSponsor', {}).get('name', ''),
                     "Start Date": start_date,
-                    "Completion Date": completion_date,
+                    "Expected Completion Date": completion_date,
                     "URL": url
                 })
 
