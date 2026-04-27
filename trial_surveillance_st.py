@@ -196,7 +196,7 @@ def main():
 
             st.divider()
 
-            # --- PUBLICATIONS SECTION ---
+            # --- PUBLICATIONS SECTION (Completed Trials with Uploaded Results) ---
             st.markdown("#### 📚 Related Publication(s) for Each Completed Trial (With Results)")
             st.info("Linked publications are retrieved from a) citations uploaded by trial investigators b) automatically derived from PubMed where NCT IDs have been cited / mentioned. Derived publications are likely to be more recent than the trial completion date, and are typically the articles describing the results of the trial.")
 
@@ -349,6 +349,69 @@ def main():
                     st.dataframe(pd.DataFrame(df_outcome_no_res), column_config={"URL": st.column_config.LinkColumn("Link", display_text="View on CT.gov"), "Primary Outcomes": st.column_config.TextColumn("Primary Outcomes", width="large"), "Secondary Outcomes": st.column_config.TextColumn("Secondary Outcomes", width="large")}, hide_index=True, use_container_width=True)
 
             st.divider()
+
+            st.markdown("#### 📚 Related Publication(s) for Each Completed Trial (Overdue Results)")
+            st.info("Linked publications are retrieved from a) citations uploaded by trial investigators b) automatically derived from PubMed where NCT IDs have been cited / mentioned. Derived publications are likely to be more recent than the trial completion date, and are typically the articles describing the results of the trial.")
+
+            with st.spinner("Fetching citation details from OpenAlex..."):
+                citation_display_list = []
+                for s in comp_no_res:
+                    nct_id = s['protocolSection']['identificationModule']['nctId']
+                    references = s.get('protocolSection', {}).get('referencesModule', {}).get('references', [])
+                    for ref in references:
+                        citation_text = ref.get('citation', 'N/A')
+                        match = re.search(r'10\.\d{4,}/[^\s]+', citation_text)
+
+                        # FIXED: Initialize doi as None to avoid crashing if no match is found!
+                        doi = None
+                        if match:
+                            doi = match.group(0).rstrip('.')
+                            
+                        citation_display_list.append({
+                            "NCT ID": nct_id, 
+                            "Citation Text": citation_text,
+                            "DOI" : doi,
+                            "PMID": ref.get('pmid'),
+                            "Type": ref.get('type', 'N/A')
+                            })
+
+                if citation_display_list:
+                    df_citation = pd.DataFrame(citation_display_list)
+                    
+                    # Fetch from OpenAlex
+                    oa_result_fields = ['ids', 'publication_date']
+                    pmid_list = df_citation['PMID'].unique().tolist() 
+                    doi_list = [d for d in df_citation['DOI'].unique().tolist() if d is not None] # ensure no None types are sent to API
+                    
+                    if doi_list:
+                        oa_results = Works().filter_or(doi=doi_list).select(oa_result_fields).get()
+                        pub_date_map = {}
+                        
+                        for work in oa_results:
+                            raw_doi_url = work.get('ids', {}).get('doi', '').strip()
+                            if raw_doi_url:
+                                naked_doi = raw_doi_url.split('doi.org/')[-1].strip().lower()
+                                pub_date_map[naked_doi] = work.get('publication_date')
+
+                        df_citation['Publication Date'] = df_citation['DOI'].map(pub_date_map)
+                    else:
+                        df_citation['Publication Date'] = None
+
+                    st.dataframe(
+                        df_citation,
+                        column_config={
+                            "NCT ID": st.column_config.TextColumn("NCT ID"),
+                            "Citation Text": st.column_config.TextColumn("Citation Text", width="large"),
+                            "PMID": st.column_config.TextColumn("PMID"),
+                            "DOI": st.column_config.TextColumn("DOI Link"), 
+                            "Publication Date": st.column_config.DateColumn("Published"),
+                            "Type": st.column_config.TextColumn("Type"),
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+                else:
+                    st.write("No publications found for these trials.")
 
 
         # --- ACTIVE TRIALS (PENDING RESULTS) SECTION ---
