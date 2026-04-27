@@ -35,6 +35,7 @@ def fetch_and_render_publications(trials):
         citation_display_list = []
         for s in trials:
             nct_id = s['protocolSection']['identificationModule']['nctId']
+            trial_title = s['protocolSection']['identificationModule']['briefTitle']
             references = s.get('protocolSection', {}).get('referencesModule', {}).get('references', [])
             for ref in references:
                 citation_text = ref.get('citation', 'N/A')
@@ -46,6 +47,7 @@ def fetch_and_render_publications(trials):
                     
                 citation_display_list.append({
                     "NCT ID": nct_id, 
+                    "Trial Title": trial_title,
                     "Citation Text": citation_text,
                     "DOI" : doi,
                     "PMID": ref.get('pmid'),
@@ -83,6 +85,7 @@ def fetch_and_render_publications(trials):
                 df_citation,
                 column_config={
                     "NCT ID": st.column_config.TextColumn("NCT ID"),
+                    "Trial Title": st.column_config.TextColumn("Trial Title", width="large"),
                     "Citation Text": st.column_config.TextColumn("Citation Text", width="large"),
                     "PMID": st.column_config.TextColumn("PMID"),
                     "DOI": st.column_config.TextColumn("DOI Link"), 
@@ -223,7 +226,7 @@ def main():
             fetch_and_render_publications(comp_no_res)
 
 
-
+        st.divider()
         # --- ACTIVE TRIALS (PENDING RESULTS) SECTION ---
         if active: 
             st.markdown("## 📋 Active Trials (Pending Results)")
