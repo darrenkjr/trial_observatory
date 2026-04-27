@@ -101,7 +101,7 @@ def main():
     # --- App Config ---
     st.set_page_config(page_title="TrialTrackr", page_icon="🔬", layout="wide")
     st.title("🔬 MCHRI Living Clinical Trial Observatory")
-    st.info("This is an experimental tool to help you track the status of clinical trials for a given PICO question for evidence surveillance purposes (eg: updating a systematic review or guideline). Main source of data is clinicaltrials.gov, with publication data from OpenAlex where possible.") 
+    st.info("This is an experimental tool to help you track the status of clinical trials for a given PICO question for evidence surveillance purposes (eg: updating a systematic review or guideline, or quick scoping search for goldsets for new systematic reviews). Main source of data is clinicaltrials.gov, with publication data from OpenAlex where possible.") 
     st.write("It is a work in progress and will be updated regularly. Future work will involve linking NCTIDs to published articles and more. For feature requests, please contact darren.rajit@monash.edu")
 
     # --- Sidebar Inputs ---
